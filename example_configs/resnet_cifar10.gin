@@ -25,3 +25,4 @@ ModularGAN.g_lr = 0.0002
 ModularGAN.g_optimizer_fn = @tf.train.AdamOptimizer
 tf.train.AdamOptimizer.beta1 = 0.5
 tf.train.AdamOptimizer.beta2 = 0.999
+run_config.save_checkpoints_steps = None

@@ -31,10 +31,14 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
+import glob
 import inspect
+from os.path import basename, dirname
 
 from absl import flags
 from absl import logging
+from tensorflow.python.ops.image_ops_impl import ResizeMethod
+
 from compare_gan.tpu import tpu_random
 import gin
 import numpy as np
@@ -613,11 +617,33 @@ class SoftLabeledImagenetDataset(ImagenetDataset):
     parsed_label = tf.parse_single_example(new_unparsed_label, label_spec)
     with tf.control_dependencies([
         tf.assert_equal(parsed_label["file_name"], feature_dict["file_name"])]):
-      feature_dict["label"] = tf.nn.softmax(logits=parsed_label["label"])
+        feature_dict["label"] = tf.nn.softmax(logits=parsed_label["label"])
     return feature_dict
 
 
+def load_image_folder(dataset_folder, size=[64, 64], **kwargs):
+    types = ('/*/*.jpg', '/*/*.png', '/*/*.jpeg')
+    files_path = []
+    for files in types:
+        files_path.extend(glob.glob(FLAGS.dataset_root + files))
+    labels = [basename(dirname(f)) for f in files_path]
+    files_path = tf.constant(files_path)
+    labels = tf.constant(labels)
+
+    def _parse_images(file_path, label, size):
+        image = tf.read_file(file_path)
+        image = tf.image.decode_jpeg(image, channels=3)
+        image = tf.image.convert_image_dtype(image, tf.float32)
+        image = tf.image.resize_images(image, size, method=ResizeMethod.NEAREST_NEIGHBOR)
+        # image = tf.image.resize_image_with_crop_or_pad(image, size[0], size[1])
+        return image, label
+
+    return tf.data.Dataset.from_tensor_slices((files_path, labels)).map(lambda x, y: _parse_images(x, y, size),
+                                                                        num_parallel_calls=1)
+
+
 DATASETS = {
+    "image-folder": load_image_folder,
     "celeb_a": CelebaDataset,
     "cifar10": Cifar10Dataset,
     "fashion-mnist": FashionMnistDataset,
